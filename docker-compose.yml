@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tactiq-postgres
+    environment:
+      POSTGRES_DB: tactiq
+      POSTGRES_USER: tactiq
+      POSTGRES_PASSWORD: tactiq
+    ports:
+      - "5432:5432"
+    volumes:
+      - tactiq-postgres-data:/var/lib/postgresql/data
+      - ./infra/db/schema.sql:/docker-entrypoint-initdb.d/001-schema.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tactiq -d tactiq"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  tactiq-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: tactiq-api
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg://tactiq:tactiq@postgres:5432/tactiq
+      - DATABASE_ENABLED=true
+    volumes:
+      - ./backend:/app/backend
+      - ./data_raw:/app/data_raw
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  tactiq-web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: tactiq-web
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - tactiq-api
+
+volumes:
+  tactiq-postgres-data:
